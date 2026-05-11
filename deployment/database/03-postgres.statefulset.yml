@@ -119,5 +119,5 @@ spec:
         accessModes: ["ReadWriteOnce"]
         resources:
           requests:
-            storage: 20Gi
+            storage: 4Gi
         # storageClassName: standard  # Bỏ comment nếu cần chỉ định storage class
