@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: default
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/alerts.yml
+
+    scrape_configs:
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'docaiplatform-backend'
+        static_configs:
+          - targets: ['docaiplatform-backend:8000']
+        metrics_path: /metrics
+
+      - job_name: 'platform-worker'
+        static_configs:
+          - targets: ['docaiplatform-platform-worker:8001']
+        metrics_path: /metrics
+
+      - job_name: 'docprocess-worker'
+        static_configs:
+          - targets: ['docprocess-worker:8002']
+        metrics_path: /metrics
+
+  alerts.yml: |
+    groups:
+      - name: docai-alerts
+        rules:
+          - alert: ServiceDown
+            expr: up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "{{ $labels.job }} has been down for more than 1 minute."
+
+          - alert: HighMemoryUsage
+            expr: container_memory_usage_bytes > 1.5e9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage on {{ $labels.pod }}"
+              description: "Pod {{ $labels.pod }} memory usage exceeded 1.5GB."
+    # Datasource tự động provision Prometheus
+  datasource.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+
+  # Dashboard provider — trỏ vào thư mục dashboards
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: DocAI
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards

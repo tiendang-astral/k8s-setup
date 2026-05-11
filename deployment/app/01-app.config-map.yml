@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+  labels:
+    app: docai
+data:
+  # ── General ────────────────────────────────────────────────────────────────
+  PYTHONUNBUFFERED: "1"
+  LOG_LEVEL: "INFO"
+  APP_ENV: "production"
+
+  # ── Database ───────────────────────────────────────────────────────────────
+  # DATABASE_URL and POSTGRES_PASSWORD are injected from deployment env section
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  REDIS_URL: "redis://redis:6379/0"
+
+  # ── MinIO ──────────────────────────────────────────────────────────────────
+  MINIO_ENDPOINT: "minio:9000"
+  MINIO_PUBLIC_ENDPOINT: "localhost:29005"
+  MINIO_USE_SSL: "false"
+  MINIO_PUBLIC_USE_SSL: "false"
+  MINIO_BUCKET: "netmind"
+  MINIO_COLLECTION: "docaiplatform"
+  MINIO_BUCKET_RAW: "raw"
+  MINIO_BUCKET_PROCESSED: "processed"
+
+  # ── AI Gateway ─────────────────────────────────────────────────────────────
+  # AI_GATEWAY_KEY được inject từ app-secret
+  AI_GATEWAY_ENDPOINT: "http://localhost:9999"
+  AI_GATEWAY_MODEL: "your-ai-gateway-model-here"
+
+  # ── Proxy ──────────────────────────────────────────────────────────────────
+  NO_PROXY: "localhost,127.0.0.1,::1"
+  no_proxy: "localhost,127.0.0.1,::1"
+
+  # ── Storage paths ──────────────────────────────────────────────────────────
+  UPLOAD_DIR: "/app/uploads"
+  OUTPUT_DIR: "/app/data/output"
+  VECTOR_DB_URL: ""
+
+  # ── Backend specific ───────────────────────────────────────────────────────
+  API_HOST: "0.0.0.0"
+  API_PORT: "8000"
+  API_TITLE: "DocAI Platform API"
+  API_VERSION: "3.0.0"
+  API_DESCRIPTION: "DocAI Platform backend"
+  CORS_ALLOW_ORIGINS: "http://localhost:30000,http://localhost:3000,http://localhost:3001,http://localhost:8080,http://localhost:8081,http://127.0.0.1:3000,http://127.0.0.1:3001,http://127.0.0.1:8080,http://127.0.0.1:8081"
+  # For running k8s minikube with safari, set false
+  AUTH_COOKIE_SECURE: "false"
+  AUTH_COOKIE_SAMESITE: "lax"
+  AUTH_COOKIE_DOMAIN: ""
+  ENABLE_HSTS: "true"
+  ENABLE_API_DOCS: "false"
+  ENABLE_METRICS_ENDPOINT: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  OTEL_SAMPLE_RATE: "1.0"
+  OTEL_TRACE_CONSOLE: "false"
+
+  # ── Platform worker specific ───────────────────────────────────────────────
+  PLATFORM_STREAM_STALE_CLAIM_MS: "900000"
+  PLATFORM_FULL_FLOW_WAIT_SECONDS: "900"
+  PLATFORM_FULL_FLOW_POLL_SECONDS: "5"
+  PLATFORM_GRACEFUL_SHUTDOWN_SECONDS: "30"
+
+  # ── Docprocess worker specific ─────────────────────────────────────────────
+  DOCPROCESS_WORKER_CONCURRENCY: "1"
+  DOCPROCESS_STREAM_STALE_CLAIM_MS: "3600000"
+  DOCPROCESS_HEALTH_PORT: "8002"
+  WORKSPACE_DIR: "/app/workspace"
+
+  # ── Frontend specific ──────────────────────────────────────────────────────
+  NEXT_PUBLIC_BASE_PATH: ""
+  NEXT_PUBLIC_API_BASE_URL: "http://localhost:30001"
+  NEXT_PUBLIC_APP_NAME: "DocFlow Platform"
+  NEXT_PUBLIC_APP_TITLE: "DocFlow Platform"
+  NEXT_PUBLIC_APP_DESCRIPTION: "Hệ thống xử lý và quản lý luồng hồ sơ bằng AI"
+  INTERNAL_API_BASE_URL: "http://docaiplatform-backend:8000"

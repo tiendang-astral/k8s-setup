@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: docaiplatform-frontend
+  namespace: default
+  labels:
+    app: docaiplatform-frontend
+spec:
+  type: NodePort
+  selector:
+    app: docaiplatform-frontend
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      nodePort: 30000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docaiplatform-frontend
+  namespace: default
+  labels:
+    app: docaiplatform-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docaiplatform-frontend
+  template:
+    metadata:
+      labels:
+        app: docaiplatform-frontend
+    spec:
+      initContainers:
+        # Chờ backend healthy trước khi frontend start
+        - name: wait-for-backend
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until wget -qO- http://docaiplatform-backend:8000/health; do
+                echo 'Waiting for backend...';
+                sleep 3;
+              done;
+      containers:
+        - name: docaiplatform-frontend
+          image: duongnguyen291/docflow-frontend:prod
+          ports:
+            - name: http
+              containerPort: 3000
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: NEXT_PUBLIC_BASE_PATH
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_BASE_PATH
+            - name: NEXT_PUBLIC_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_API_BASE_URL
+            - name: NEXT_PUBLIC_APP_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_APP_NAME
+            - name: NEXT_PUBLIC_APP_TITLE
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_APP_TITLE
+            - name: NEXT_PUBLIC_APP_DESCRIPTION
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: NEXT_PUBLIC_APP_DESCRIPTION
+            - name: INTERNAL_API_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: INTERNAL_API_BASE_URL
+          startupProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /login
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi

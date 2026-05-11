@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: docaiplatform-backend
+  namespace: default
+  labels:
+    app: docaiplatform-backend
+spec:
+  type: NodePort
+  selector:
+    app: docaiplatform-backend
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      nodePort: 30001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docaiplatform-backend
+  namespace: default
+  labels:
+    app: docaiplatform-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docaiplatform-backend
+  template:
+    metadata:
+      labels:
+        app: docaiplatform-backend
+    spec:
+      initContainers:
+        # Chờ postgres sẵn sàng trước khi chạy migration
+        - name: wait-for-postgres
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z postgres 5432; do
+                echo 'Waiting for postgres...';
+                sleep 2;
+              done;
+              echo 'Postgres is ready!'
+        # Chờ redis sẵn sàng
+        - name: wait-for-redis
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z redis 6379; do
+                echo 'Waiting for redis...';
+                sleep 2;
+              done;
+              echo 'Redis is ready!'
+      containers:
+        - name: docaiplatform-backend
+          image: duongnguyen291/docaiplatform-backend:prod
+          command:
+            - sh
+            - -c
+            - |
+              python -c 'from backend.database import init_database; init_database()' \
+              && uvicorn backend.main:app --host 0.0.0.0 --port 8000 --workers 4
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/docaiplatform"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: JWT_SECRET_KEY
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AI_GATEWAY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: AI_GATEWAY_KEY
+          volumeMounts:
+            - name: uploads-data
+              mountPath: /app/uploads
+            - name: temp-data
+              mountPath: /app/temp
+            - name: output-data
+              mountPath: /app/data/output
+            - name: logs-data
+              mountPath: /app/logs
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+      volumes:
+        - name: uploads-data
+          persistentVolumeClaim:
+            claimName: uploads-data
+        - name: temp-data
+          persistentVolumeClaim:
+            claimName: temp-data
+        - name: output-data
+          persistentVolumeClaim:
+            claimName: output-data
+        - name: logs-data
+          persistentVolumeClaim:
+            claimName: logs-data

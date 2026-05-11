@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docprocess-worker
+  namespace: default
+  labels:
+    app: docprocess-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docprocess-worker
+  template:
+    metadata:
+      labels:
+        app: docprocess-worker
+    spec:
+      initContainers:
+        - name: wait-for-redis
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z redis 6379; do
+                echo 'Waiting for redis...';
+                sleep 2;
+              done;
+      containers:
+        - name: docprocess-worker
+          image: duongnguyen291/docprocess-worker:prod
+          command:
+            - python
+            - -m
+            - workers.direct_worker
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+          volumeMounts:
+            - name: docprocess-workspace
+              mountPath: /app/workspace
+            - name: logs-data
+              mountPath: /app/logs
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8002
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8002
+            initialDelaySeconds: 40
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8002
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+      volumes:
+        - name: docprocess-workspace
+          persistentVolumeClaim:
+            claimName: docprocess-workspace
+        - name: logs-data
+          persistentVolumeClaim:
+            claimName: logs-data

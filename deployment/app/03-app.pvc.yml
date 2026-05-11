@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: uploads-data
+  namespace: default
+  labels:
+    app: docai
+spec:
+  accessModes:
+    - ReadWriteMany   # Cần RWX vì backend + platform-worker cùng mount
+  resources:
+    requests:
+      storage: 20Gi
+  # storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: temp-data
+  namespace: default
+  labels:
+    app: docai
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: output-data
+  namespace: default
+  labels:
+    app: docai
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 20Gi
+  # storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: logs-data
+  namespace: default
+  labels:
+    app: docai
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: docprocess-workspace
+  namespace: default
+  labels:
+    app: docai
+spec:
+  accessModes:
+    - ReadWriteOnce   # Chỉ docprocess-worker dùng
+  resources:
+    requests:
+      storage: 10Gi
+  # storageClassName: standard

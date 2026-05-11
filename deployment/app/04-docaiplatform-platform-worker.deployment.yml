@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: docaiplatform-platform-worker
+  namespace: default
+  labels:
+    app: docaiplatform-platform-worker
+spec:
+  type: ClusterIP
+  selector:
+    app: docaiplatform-platform-worker
+  ports:
+    - name: metrics
+      port: 8001
+      targetPort: 8001
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docaiplatform-platform-worker
+  namespace: default
+  labels:
+    app: docaiplatform-platform-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: docaiplatform-platform-worker
+  template:
+    metadata:
+      labels:
+        app: docaiplatform-platform-worker
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z postgres 5432; do
+                echo 'Waiting for postgres...';
+                sleep 2;
+              done;
+        - name: wait-for-redis
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until nc -z redis 6379; do
+                echo 'Waiting for redis...';
+                sleep 2;
+              done;
+      containers:
+        - name: platform-worker
+          image: duongnguyen291/docaiplatform-platform-worker:prod
+          command:
+            - sh
+            - -c
+            - |
+              python -c 'from backend.database import init_database; init_database()' \
+              && python -m backend.workers.platform_worker
+          envFrom:
+            - configMapRef:
+                name: app-config
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql://postgres:$(POSTGRES_PASSWORD)@postgres:5432/docaiplatform"
+            - name: JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: JWT_SECRET_KEY
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: AI_GATEWAY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-secret
+                  key: AI_GATEWAY_KEY
+          volumeMounts:
+            - name: uploads-data
+              mountPath: /app/uploads
+            - name: temp-data
+              mountPath: /app/temp
+            - name: output-data
+              mountPath: /app/data/output
+            - name: logs-data
+              mountPath: /app/logs
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: 8001
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8001
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8001
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: uploads-data
+          persistentVolumeClaim:
+            claimName: uploads-data
+        - name: temp-data
+          persistentVolumeClaim:
+            claimName: temp-data
+        - name: output-data
+          persistentVolumeClaim:
+            claimName: output-data
+        - name: logs-data
+          persistentVolumeClaim:
+            claimName: logs-data

@@ -1,0 +1,84 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-init
+  namespace: default
+  labels:
+    app: minio-init
+spec:
+  activeDeadlineSeconds: 300      # Timeout 5 phút cho toàn bộ Job
+  ttlSecondsAfterFinished: 120  # Tự xóa Job sau 2 phút khi hoàn thành
+  backoffLimit: 5               # Số lần retry nếu thất bại
+  template:
+    metadata:
+      labels:
+        app: minio-init
+    spec:
+      restartPolicy: OnFailure  # Tương đương restart: "no" trong compose
+      initContainers:
+        # Chờ MinIO API sẵn sàng trước khi chạy mc
+        - name: wait-for-minio
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              until wget -qO- http://minio:9000/minio/health/ready; do
+                echo 'Waiting for MinIO to be ready...';
+                sleep 2;
+              done;
+              echo 'MinIO is ready!'
+      containers:
+        - name: minio-init
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: minio-secret
+                  key: MINIO_ROOT_PASSWORD
+            - name: MINIO_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: minio-config
+                  key: MINIO_BUCKET
+          volumeMounts:
+            - name: cors-config
+              mountPath: /config/cors.json
+              subPath: cors.json
+          command:
+            - /bin/sh
+            - -c
+            - |
+              # Set alias cho MinIO server
+              until mc alias set local http://minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
+                echo 'Retrying mc alias set...';
+                sleep 2;
+              done;
+
+              # Tạo bucket nếu chưa tồn tại
+              mc ls local/$MINIO_BUCKET >/dev/null 2>&1 || mc mb local/$MINIO_BUCKET;
+              echo "Bucket '$MINIO_BUCKET' is ready.";
+
+              # Apply CORS config
+              mc cors set local/$MINIO_BUCKET /config/cors.json;
+              echo "CORS config applied.";
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+      volumes:
+        - name: cors-config
+          configMap:
+            name: minio-config
+            items:
+              - key: cors.json
+                path: cors.json
