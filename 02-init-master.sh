@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 #
 # 02-init-master.sh
-# Khởi tạo control-plane (master) node bằng kubeadm
+# Khởi tạo control-plane (master) node bằng kubeadm + cài CNI
 #
 # Env vars có thể chỉnh:
 #   POD_CIDR              - dải IP cho pod network (default: 10.244.0.0/16)
 #   SERVICE_CIDR          - dải IP cho service (default: 10.96.0.0/12)
 #   APISERVER_ADVERTISE   - IP api-server sẽ advertise (default: IP mặc định của host)
 #   CONTROL_PLANE_ENDPOINT- endpoint HA (vd: k8s-api.example.com:6443). Để trống nếu không HA.
+#   CNI                   - calico | flannel (default: calico)
+#   CALICO_VERSION        - version Calico (default: v3.28.0)
 #
 set -euo pipefail
 
@@ -21,10 +23,15 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
+# ============================================================
+# Cấu hình
+# ============================================================
 POD_CIDR="${POD_CIDR:-10.244.0.0/16}"
 SERVICE_CIDR="${SERVICE_CIDR:-10.96.0.0/12}"
-APISERVER_ADVERTISE="${APISERVER_ADVERTISE:-$(ip -4 route get 1.1.1.1 | awk '{print $7; exit}')}"
+APISERVER_ADVERTISE="${APISERVER_ADVERTISE:-$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')}"
 CONTROL_PLANE_ENDPOINT="${CONTROL_PLANE_ENDPOINT:-}"
+CNI="${CNI:-calico}"
+CALICO_VERSION="${CALICO_VERSION:-v3.28.0}"
 
 # Tên user thường (không phải root) để copy kubeconfig về
 TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
@@ -34,13 +41,20 @@ log "  POD_CIDR              = ${POD_CIDR}"
 log "  SERVICE_CIDR          = ${SERVICE_CIDR}"
 log "  APISERVER_ADVERTISE   = ${APISERVER_ADVERTISE}"
 log "  CONTROL_PLANE_ENDPOINT= ${CONTROL_PLANE_ENDPOINT:-<không có>}"
+log "  CNI                   = ${CNI}"
 log "  TARGET_USER           = ${TARGET_USER}"
 echo
 
-log "==> [1/4] Pull control-plane images"
-kubeadm config images pull
+# ============================================================
+# BƯỚC 1: Pull control-plane images
+# ============================================================
+log "==> [1/5] Pull control-plane images"
+kubeadm config images pull --cri-socket=unix:///run/containerd/containerd.sock
 
-log "==> [2/4] Chạy kubeadm init"
+# ============================================================
+# BƯỚC 2: kubeadm init
+# ============================================================
+log "==> [2/5] Chạy kubeadm init"
 KUBEADM_ARGS=(
   --pod-network-cidr="${POD_CIDR}"
   --service-cidr="${SERVICE_CIDR}"
@@ -53,7 +67,10 @@ fi
 
 kubeadm init "${KUBEADM_ARGS[@]}" | tee /var/log/kubeadm-init.log
 
-log "==> [3/4] Cấu hình kubectl cho user ${TARGET_USER}"
+# ============================================================
+# BƯỚC 3: Cấu hình kubectl
+# ============================================================
+log "==> [3/5] Cấu hình kubectl cho user ${TARGET_USER}"
 if [[ "${TARGET_USER}" != "root" ]]; then
   USER_HOME=$(getent passwd "${TARGET_USER}" | cut -d: -f6)
   mkdir -p "${USER_HOME}/.kube"
@@ -66,14 +83,42 @@ cp -f /etc/kubernetes/admin.conf /root/.kube/config
 
 export KUBECONFIG=/etc/kubernetes/admin.conf
 
-log "==> [4/4] Cài CNI plugin (Calico)"
-"$(dirname "$0")/04-install-cni.sh"
+# ============================================================
+# BƯỚC 4: Cài CNI
+# ============================================================
+log "==> [4/5] Cài CNI plugin: ${CNI}"
+case "${CNI}" in
+  calico)
+    log "Cài Calico ${CALICO_VERSION}"
+    kubectl apply -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+    ;;
+  flannel)
+    log "Cài Flannel"
+    kubectl apply -f "https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml"
+    ;;
+  *)
+    error "CNI không hỗ trợ: ${CNI}. Dùng 'calico' hoặc 'flannel'."
+    exit 1
+    ;;
+esac
 
-# Lưu lệnh join để worker dùng
+log "Đợi pod CNI sẵn sàng (timeout 5 phút)..."
+sleep 5
+kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=300s || warn "Một số pod chưa Ready, kiểm tra lại bằng: kubectl get pods -n kube-system"
+
+kubectl get pods -n kube-system
+
+# ============================================================
+# BƯỚC 5: Tạo lệnh join cho worker
+# ============================================================
+log "==> [5/5] Tạo lệnh join cho worker"
 JOIN_CMD=$(kubeadm token create --print-join-command)
 echo "${JOIN_CMD}" > /root/kubeadm-join-command.sh
 chmod +x /root/kubeadm-join-command.sh
 
+# ============================================================
+# Kết thúc
+# ============================================================
 log ""
 log "✅ Master node đã sẵn sàng!"
 log ""
