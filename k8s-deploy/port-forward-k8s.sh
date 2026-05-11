@@ -7,7 +7,7 @@
 #
 # Or use `minikube tunnel` instead (does the same thing at cluster level).
 # =============================================================================
-
+I'm working with k8s and VM. The application has front end, back end, database and some worker. You can refer to /deployment. I want to implement k8s cluster for all deployment and statefulset with on-premise storage like Ceph. Please list the step like: phase 1 implement cluster master with docker and write detail, phase 2 initilize storage, phase 3 apply kubelet yml, etc. You can refer to the source to give me instruction. I'm confusing
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -8,6 +8,7 @@ Chỉ cần SSH vào máy và chạy 1 lệnh duy nhất.
 - **Container runtime**: containerd (với SystemdCgroup)
 - **Bootstrap**: kubeadm
 - **CNI**: Calico (mặc định), có thể đổi sang Flannel
+- **Metrics Server**: tự động thu thập tài nguyên cho `kubectl top`
 - **Kubernetes version**: v1.30 (chỉnh được qua biến môi trường)
 
 ## Yêu cầu
@@ -77,8 +78,9 @@ sudo CONTROL_PLANE_ENDPOINT=k8s-api.example.com:6443 ./setup-master.sh
 sudo ./scripts/00-common.sh        # prerequisites (tất cả node)
 sudo ./scripts/01-install-k8s.sh   # cài kubeadm/kubelet/kubectl (tất cả node)
 sudo ./scripts/02-init-master.sh   # init control-plane (chỉ master)
-sudo ./scripts/03-join-worker.sh "<lệnh join>"  # join (chỉ worker)
-sudo ./scripts/04-install-cni.sh   # cài CNI (đã được 02 gọi sẵn)
+sudo ./scripts/03-join-worker.sh "<lệnh join>"          # join (chỉ worker)
+sudo ./scripts/04-install-cni.sh                        # cài CNI (đã được 02 gọi sẵn)
+sudo ./scripts/04-install-metrics-server.sh             # cài Metrics Server (chỉ master, sau khi CNI ready)
 ```
 
 ## Reset / cài lại
@@ -118,6 +120,7 @@ k8s-cluster-setup/
     ├── 02-init-master.sh     # kubeadm init + cấu hình kubectl
     ├── 03-join-worker.sh     # kubeadm join
     ├── 04-install-cni.sh     # Cài Calico / Flannel
+    ├── 04-install-metrics-server.sh   # Cài Metrics Server
     ├── reset.sh              # Reset cluster trên node
     └── status.sh             # Kiểm tra trạng thái
 ```
