@@ -1,0 +1,108 @@
+---
+# CephCluster — cấu hình cho lab/Multipass
+# Dùng loop device thay vì raw disk thật
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: rook-ceph
+  namespace: rook-ceph
+spec:
+  cephVersion:
+    image: quay.io/ceph/ceph:v18.2.4   # Reef — stable
+    allowUnsupported: false
+
+  dataDirHostPath: /var/lib/rook
+
+  # 1 MON cho lab (3 cho production)
+  mon:
+    count: 3
+    # allowMultiplePerNode: true          # cần thiết nếu < 3 worker node
+
+  mgr:
+    count: 1
+    # allowMultiplePerNode: true
+    modules:
+      - name: pg_autoscaler
+        enabled: true
+      - name: dashboard
+        enabled: true
+
+  dashboard:
+    enabled: true
+    ssl: true
+
+  # Monitoring (Prometheus)
+  monitoring:
+    enabled: false                      # bật nếu đã cài Prometheus
+
+  network:
+    connections:
+      encryption:
+        enabled: false
+      compression:
+        enabled: false
+
+  crashCollector:
+    disable: false
+
+  cleanupPolicy:
+    confirmation: ""
+    sanitizeDisks:
+      method: quick
+      dataSource: zero
+      iteration: 1
+    allowUninstallWithVolumes: false
+
+  # Placement — phân bổ daemon ra các node
+  placement:
+    all:
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+
+  resources:
+    mgr:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    mon:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    osd:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+    prepareosd:
+      requests:
+        cpu: 100m
+        memory: 50Mi
+      limits:
+        cpu: 500m
+        memory: 400Mi
+
+  storage:
+    useAllNodes: true
+    useAllDevices: false
+    deviceFilter: "loop200"            # chỉ dùng loop200 (tên device không có /dev/ prefix)
+    config:
+      osdsPerDevice: "1"
+
+  priorityClassNames:
+    mon: system-node-critical
+    osd: system-node-critical
+    mgr: system-cluster-critical
+
+  disruptionManagement:
+    managePodBudgets: true
+    osdMaintenanceTimeout: 30
+    pgHealthCheckTimeout: 0
