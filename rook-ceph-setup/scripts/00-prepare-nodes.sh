@@ -8,7 +8,7 @@
 #
 # Env vars:
 #   OSD_IMG_PATH  - Path file image (default: /var/lib/rook-osd.img)
-#   OSD_IMG_SIZE  - Size GB (default: 10)
+#   OSD_IMG_SIZE  - Size GB (default: 4)
 #   OSD_LOOP_DEV  - Loop device (default: /dev/loop200)
 #
 set -euo pipefail
