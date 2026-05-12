@@ -7,9 +7,9 @@
 # Env vars:
 #   ROOK_VERSION    - Phiên bản Rook (default: v1.14.9)
 #   WAIT_TIMEOUT    - Giây timeout đợi operator (default: 300)
-#   SKIP_PREPARE    - Skip bước prepare node nếu đã làm rồi (default: 0)
-#   WORKER_NODES    - Danh sách IP worker cách nhau dấu phẩy (vd: "10.0.0.2,10.0.0.3")
-#                    Để trống nếu đã chạy 00-prepare-nodes.sh thủ công
+#
+# Yêu cầu trước khi chạy:
+#   Đã chạy 00-prepare-nodes.sh trên TẤT CẢ worker node
 #
 set -euo pipefail
 
@@ -22,8 +22,6 @@ error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
 ROOK_VERSION="${ROOK_VERSION:-v1.14.9}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-300}"
-SKIP_PREPARE="${SKIP_PREPARE:-0}"
-WORKER_NODES="${WORKER_NODES:-}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_DIR="${SCRIPT_DIR}/../manifests"
 ROOK_BASE="https://raw.githubusercontent.com/rook/rook/${ROOK_VERSION}/deploy/examples"
@@ -57,36 +55,9 @@ if [[ "${READY}" -lt 2 ]]; then
 fi
 
 # ============================================================
-# BƯỚC 1: Prepare worker nodes (tạo loop device OSD)
+# BƯỚC 1: Cài Rook operator
 # ============================================================
-if [[ "${SKIP_PREPARE}" != "1" && -n "${WORKER_NODES}" ]]; then
-  log "==> [1/5] Prepare worker nodes qua SSH"
-
-  IFS=',' read -ra NODES <<< "${WORKER_NODES}"
-  for NODE_IP in "${NODES[@]}"; do
-    NODE_IP="${NODE_IP// /}"
-    log "Preparing node ${NODE_IP}..."
-    scp -o StrictHostKeyChecking=no \
-      "${SCRIPT_DIR}/00-prepare-nodes.sh" \
-      root@"${NODE_IP}":/tmp/00-prepare-nodes.sh
-    ssh -o StrictHostKeyChecking=no root@"${NODE_IP}" \
-      "chmod +x /tmp/00-prepare-nodes.sh && sudo /tmp/00-prepare-nodes.sh"
-    log "  ✅ ${NODE_IP} prepared"
-  done
-
-elif [[ "${SKIP_PREPARE}" == "1" ]]; then
-  log "==> [1/5] Skip prepare nodes (SKIP_PREPARE=1)"
-else
-  warn "WORKER_NODES không được set."
-  warn "Nếu chưa chạy 00-prepare-nodes.sh trên worker nodes, hãy làm thủ công trước!"
-  read -rp "Tiếp tục không? (yes/no): " confirm
-  [[ "${confirm}" != "yes" ]] && exit 1
-fi
-
-# ============================================================
-# BƯỚC 2: Cài Rook operator
-# ============================================================
-log "==> [2/5] Cài Rook Operator (${ROOK_VERSION})"
+log "==> [1/4] Cài Rook Operator (${ROOK_VERSION})"
 
 # CRDs
 log "Apply CRDs..."
@@ -109,7 +80,7 @@ log "Operator ready ✅"
 # ============================================================
 # BƯỚC 3: Deploy CephCluster
 # ============================================================
-log "==> [3/5] Deploy CephCluster"
+log "==> [2/4] Deploy CephCluster"
 
 # Dùng manifest local (đã tuỳ chỉnh cho loop device)
 kubectl apply -f "${MANIFEST_DIR}/cluster.yaml"
@@ -151,7 +122,7 @@ kubectl -n rook-ceph get pods -o wide
 # ============================================================
 # BƯỚC 4: Apply StorageClass
 # ============================================================
-log "==> [4/5] Tạo StorageClass (RBD + CephFS)"
+log "==> [3/4] Tạo StorageClass (RBD + CephFS)"
 
 kubectl apply -f "${MANIFEST_DIR}/storageclass.yaml"
 
@@ -165,7 +136,7 @@ kubectl get sc
 # ============================================================
 # BƯỚC 5: Verify
 # ============================================================
-log "==> [5/5] Verify cluster"
+log "==> [4/4] Verify cluster"
 
 # Lấy cluster health qua toolbox
 log "Deploy Rook toolbox để check ceph status..."
