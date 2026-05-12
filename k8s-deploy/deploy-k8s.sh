@@ -59,6 +59,18 @@ fi
 
 success "Rook-Ceph storage classes are available."
 
+if ! kubectl -n rook-ceph get cephblockpool replicapool >/dev/null 2>&1; then
+  error "CephBlockPool replicapool not found. Run: kubectl apply -f rook-ceph-setup/manifests/storageclass.yaml"
+  exit 1
+fi
+
+if ! kubectl -n rook-ceph get cephfilesystem cephfs >/dev/null 2>&1; then
+  error "CephFilesystem cephfs not found. Run: kubectl apply -f rook-ceph-setup/manifests/storageclass.yaml"
+  exit 1
+fi
+
+success "Rook-Ceph pool and filesystem resources are available."
+
 # =============================================================================
 # STEP 2 – Apply Database layer
 # =============================================================================
