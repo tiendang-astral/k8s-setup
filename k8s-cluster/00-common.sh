@@ -61,6 +61,40 @@ mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml >/dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
+# Thêm registry mirror cho docker.io để tránh TLS timeout (đặc biệt từ VN)
+# Có thể tắt bằng: SKIP_REGISTRY_MIRROR=1
+if [[ "${SKIP_REGISTRY_MIRROR:-0}" != "1" ]]; then
+  log "Thêm registry mirror cho docker.io (dockerhub.timeweb.cloud)"
+  python3 - <<'PYEOF'
+import re
+path = "/etc/containerd/config.toml"
+with open(path) as f:
+    content = f.read()
+
+mirror_block = '''      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
+        endpoint = ["https://dockerhub.timeweb.cloud", "https://mirror.gcr.io", "https://registry-1.docker.io"]
+'''
+
+if 'registry.mirrors."docker.io"' not in content:
+    pattern = r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]\s*\n)'
+    if re.search(pattern, content):
+        content = re.sub(pattern, r'\1' + mirror_block, content)
+        with open(path, 'w') as f:
+            f.write(content)
+        print("  Added mirror: dockerhub.timeweb.cloud")
+    else:
+        print("  No [registry.mirrors] section found")
+else:
+    content = re.sub(
+        r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\."docker\.io"\]\s*\n\s*endpoint\s*=\s*\[)[^\]]*(\])',
+        r'\1"https://dockerhub.timeweb.cloud", "https://mirror.gcr.io", "https://registry-1.docker.io"\2',
+        content
+    )
+    with open(path, 'w') as f:
+        f.write(content)
+    print("  Updated mirror endpoints")
+PYEOF
+fi
 
 systemctl restart containerd
 systemctl enable containerd
