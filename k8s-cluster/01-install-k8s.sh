@@ -16,7 +16,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # Phiên bản Kubernetes muốn cài (chỉnh sửa nếu cần)
-K8S_VERSION="${K8S_VERSION:-v1.36.0}"
+K8S_VERSION="${K8S_VERSION:-v1.30}"
 
 log "==> Cài đặt Kubernetes ${K8S_VERSION}"
 
