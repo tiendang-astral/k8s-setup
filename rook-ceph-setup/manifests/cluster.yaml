@@ -91,9 +91,18 @@ spec:
         memory: 400Mi
 
   storage:
-    useAllNodes: true
+    useAllNodes: false
     useAllDevices: false
-    deviceFilter: "loop200"            # chỉ dùng loop200 (tên device không có /dev/ prefix)
+    nodes:
+      - name: k8s-worker-1
+        devices:
+          - name: loop200
+      - name: k8s-worker-2
+        devices:
+          - name: loop200
+      - name: k8s-worker-3
+        devices:
+          - name: loop200
     config:
       osdsPerDevice: "1"
 

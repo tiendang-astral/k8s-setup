@@ -69,6 +69,7 @@ render_operator_manifest() {
   local out="${TMP_DIR}/operator.yaml"
   curl -fsSL "${ROOK_BASE}/operator.yaml" -o "${out}"
   sed -i "s|image: rook/ceph:.*|image: ${ROOK_IMAGE}|" "${out}"
+  sed -i 's|ROOK_CEPH_ALLOW_LOOP_DEVICES: "false"|ROOK_CEPH_ALLOW_LOOP_DEVICES: "true"|' "${out}"
 
   python3 - "${out}" \
     "${ROOK_IMAGE}" \
