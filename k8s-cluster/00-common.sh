@@ -64,7 +64,8 @@ sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.to
 # Thêm registry mirror cho docker.io để tránh TLS timeout (đặc biệt từ VN)
 # Có thể tắt bằng: SKIP_REGISTRY_MIRROR=1
 if [[ "${SKIP_REGISTRY_MIRROR:-0}" != "1" ]]; then
-  log "Thêm registry mirror cho docker.io (dockerhub.timeweb.cloud)"
+  log "Thêm registry mirror cho docker.io (mirror.gcr.io)"
+  # Tìm dòng "[plugins."io.containerd.grpc.v1.cri".registry.mirrors]" và chèn mirror vào sau
   python3 - <<'PYEOF'
 import re
 path = "/etc/containerd/config.toml"
@@ -72,31 +73,24 @@ with open(path) as f:
     content = f.read()
 
 mirror_block = '''      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-        endpoint = ["https://dockerhub.timeweb.cloud", "https://mirror.gcr.io", "https://registry-1.docker.io"]
+        endpoint = ["https://mirror.gcr.io", "https://registry-1.docker.io"]
 '''
 
+# Chỉ thêm nếu chưa có
 if 'registry.mirrors."docker.io"' not in content:
+    # Tìm section [registry.mirrors] và thêm vào sau
     pattern = r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]\s*\n)'
     if re.search(pattern, content):
         content = re.sub(pattern, r'\1' + mirror_block, content)
         with open(path, 'w') as f:
             f.write(content)
-        print("  Added mirror: dockerhub.timeweb.cloud")
+        print("  ✅ Đã thêm mirror docker.io -> mirror.gcr.io")
     else:
-        print("  No [registry.mirrors] section found")
+        print("  ⚠️  Không tìm thấy section [registry.mirrors], bỏ qua")
 else:
-    content = re.sub(
-        r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\."docker\.io"\]\s*\n\s*endpoint\s*=\s*\[)[^\]]*(\])',
-        r'\1"https://dockerhub.timeweb.cloud", "https://mirror.gcr.io", "https://registry-1.docker.io"\2',
-        content
-    )
-    with open(path, 'w') as f:
-        f.write(content)
-    print("  Updated mirror endpoints")
+    print("  Mirror đã có, bỏ qua")
 PYEOF
 fi
 
 systemctl restart containerd
 systemctl enable containerd
-
-log "✅ Hoàn tất prerequisites. Tiếp theo chạy: ./scripts/01-install-k8s.sh"
