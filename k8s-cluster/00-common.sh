@@ -61,36 +61,6 @@ mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml >/dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
-# Thêm registry mirror cho docker.io để tránh TLS timeout (đặc biệt từ VN)
-# Có thể tắt bằng: SKIP_REGISTRY_MIRROR=1
-if [[ "${SKIP_REGISTRY_MIRROR:-0}" != "1" ]]; then
-  log "Thêm registry mirror cho docker.io (mirror.gcr.io)"
-  # Tìm dòng "[plugins."io.containerd.grpc.v1.cri".registry.mirrors]" và chèn mirror vào sau
-  python3 - <<'PYEOF'
-import re
-path = "/etc/containerd/config.toml"
-with open(path) as f:
-    content = f.read()
-
-mirror_block = '''      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-        endpoint = ["https://mirror.gcr.io", "https://registry-1.docker.io"]
-'''
-
-# Chỉ thêm nếu chưa có
-if 'registry.mirrors."docker.io"' not in content:
-    # Tìm section [registry.mirrors] và thêm vào sau
-    pattern = r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]\s*\n)'
-    if re.search(pattern, content):
-        content = re.sub(pattern, r'\1' + mirror_block, content)
-        with open(path, 'w') as f:
-            f.write(content)
-        print("  ✅ Đã thêm mirror docker.io -> mirror.gcr.io")
-    else:
-        print("  ⚠️  Không tìm thấy section [registry.mirrors], bỏ qua")
-else:
-    print("  Mirror đã có, bỏ qua")
-PYEOF
-fi
 
 systemctl restart containerd
 systemctl enable containerd
