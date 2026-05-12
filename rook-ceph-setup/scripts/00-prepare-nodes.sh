@@ -24,6 +24,34 @@ OSD_IMG_PATH="${OSD_IMG_PATH:-/var/lib/rook-osd.img}"
 OSD_IMG_SIZE="${OSD_IMG_SIZE:-10}"
 OSD_LOOP_DEV="${OSD_LOOP_DEV:-/dev/loop200}"
 
+ensure_rbd_module() {
+  echo rbd > /etc/modules-load.d/rbd.conf
+
+  if [[ -d /sys/module/rbd ]]; then
+    log "Kernel module rbd đã được load"
+    return 0
+  fi
+
+  local modprobe_log
+  modprobe_log="$(mktemp)"
+  if ! modprobe rbd >"${modprobe_log}" 2>&1; then
+    error "Không chạy được modprobe rbd:"
+    sed 's/^/  /' "${modprobe_log}" >&2
+    rm -f "${modprobe_log}"
+    error "Kiểm tra kernel module bằng: modinfo rbd && uname -r"
+    exit 1
+  fi
+  rm -f "${modprobe_log}"
+
+  if [[ -d /sys/module/rbd ]] || lsmod | awk '$1 == "rbd" {found=1} END {exit(found?0:1)}'; then
+    log "Kernel module rbd OK"
+    return 0
+  fi
+
+  error "modprobe rbd chạy xong nhưng không thấy /sys/module/rbd hoặc lsmod entry"
+  exit 1
+}
+
 log "================================================="
 log " Chuẩn bị OSD disk cho Rook-Ceph"
 log "  Node:         $(hostname)"
@@ -44,9 +72,7 @@ apt-get install -y lvm2 gdisk util-linux kmod
 # BƯỚC 2: Load RBD kernel module
 # ============================================================
 log "==> [2/5] Load kernel module rbd"
-echo rbd > /etc/modules-load.d/rbd.conf
-modprobe rbd
-lsmod | grep -q '^rbd' || { error "Không load được kernel module rbd"; exit 1; }
+ensure_rbd_module
 
 # ============================================================
 # BƯỚC 3: Tạo file image
