@@ -53,13 +53,6 @@ CLEANUP_CMD='
   systemctl daemon-reload
 '
 
-for NODE_IP in ${NODES}; do
-  log "Cleanup node ${NODE_IP}..."
-  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=5 \
-    root@"${NODE_IP}" "${CLEANUP_CMD}" 2>/dev/null \
-    || warn "Không SSH được ${NODE_IP}, dọn thủ công: ${CLEANUP_CMD}"
-done
-
 log ""
 log "✅ Rook-Ceph đã được gỡ hoàn toàn."
 log "Chạy lại: sudo ./setup-rook.sh"

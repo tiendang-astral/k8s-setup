@@ -57,6 +57,10 @@ sudo ./scripts/test-pvc.sh
 # Đổi version Rook
 sudo ROOK_VERSION=v1.14.0 WORKER_NODES="..." ./setup-rook.sh
 
+# Override image nếu registry mặc định không pull được
+sudo CEPH_IMAGE=quay.io/ceph/ceph:v18.2.4 ./scripts/01-install-rook.sh
+sudo ROOK_CSI_CEPH_IMAGE=quay.io/cephcsi/cephcsi:v3.11.0 ./scripts/01-install-rook.sh
+
 # Đổi size OSD disk (GB)
 sudo OSD_IMG_SIZE=20 ./scripts/00-prepare-nodes.sh
 

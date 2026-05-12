@@ -7,6 +7,14 @@
 # Env vars:
 #   ROOK_VERSION    - Phiên bản Rook (default: v1.14.9)
 #   WAIT_TIMEOUT    - Giây timeout đợi operator (default: 300)
+#   ROOK_IMAGE      - Image operator Rook (default: docker.io/rook/ceph:<ROOK_VERSION>)
+#   CEPH_IMAGE      - Image Ceph cho cluster/toolbox (default: quay.io/ceph/ceph:v18.2.4)
+#   ROOK_CSI_CEPH_IMAGE         - Image cephcsi
+#   ROOK_CSI_REGISTRAR_IMAGE    - Image csi-node-driver-registrar
+#   ROOK_CSI_RESIZER_IMAGE      - Image csi-resizer
+#   ROOK_CSI_PROVISIONER_IMAGE  - Image csi-provisioner
+#   ROOK_CSI_SNAPSHOTTER_IMAGE  - Image csi-snapshotter
+#   ROOK_CSI_ATTACHER_IMAGE     - Image csi-attacher
 #
 # Yêu cầu trước khi chạy:
 #   Đã chạy 00-prepare-nodes.sh trên TẤT CẢ worker node
@@ -25,14 +33,92 @@ WAIT_TIMEOUT="${WAIT_TIMEOUT:-300}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANIFEST_DIR="${SCRIPT_DIR}/../manifests"
 ROOK_BASE="https://raw.githubusercontent.com/rook/rook/${ROOK_VERSION}/deploy/examples"
+TMP_DIR="$(mktemp -d)"
+ROOK_IMAGE="${ROOK_IMAGE:-docker.io/rook/ceph:${ROOK_VERSION}}"
+CEPH_IMAGE="${CEPH_IMAGE:-quay.io/ceph/ceph:v18.2.4}"
+ROOK_CSI_CEPH_IMAGE="${ROOK_CSI_CEPH_IMAGE:-quay.io/cephcsi/cephcsi:v3.11.0}"
+ROOK_CSI_REGISTRAR_IMAGE="${ROOK_CSI_REGISTRAR_IMAGE:-registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.10.1}"
+ROOK_CSI_RESIZER_IMAGE="${ROOK_CSI_RESIZER_IMAGE:-registry.k8s.io/sig-storage/csi-resizer:v1.10.1}"
+ROOK_CSI_PROVISIONER_IMAGE="${ROOK_CSI_PROVISIONER_IMAGE:-registry.k8s.io/sig-storage/csi-provisioner:v4.0.1}"
+ROOK_CSI_SNAPSHOTTER_IMAGE="${ROOK_CSI_SNAPSHOTTER_IMAGE:-registry.k8s.io/sig-storage/csi-snapshotter:v7.0.2}"
+ROOK_CSI_ATTACHER_IMAGE="${ROOK_CSI_ATTACHER_IMAGE:-registry.k8s.io/sig-storage/csi-attacher:v4.5.1}"
+
+cleanup() {
+  rm -rf "${TMP_DIR}"
+}
+trap cleanup EXIT
 
 log "================================================="
 log " Rook-Ceph Install"
 log "  ROOK_VERSION  = ${ROOK_VERSION}"
 log "  WAIT_TIMEOUT  = ${WAIT_TIMEOUT}s"
 log "  MANIFEST_DIR  = ${MANIFEST_DIR}"
+log "  ROOK_IMAGE    = ${ROOK_IMAGE}"
+log "  CEPH_IMAGE    = ${CEPH_IMAGE}"
 log "================================================="
 echo
+
+render_operator_manifest() {
+  local out="${TMP_DIR}/operator.yaml"
+  curl -fsSL "${ROOK_BASE}/operator.yaml" -o "${out}"
+  sed -i "s|image: rook/ceph:.*|image: ${ROOK_IMAGE}|" "${out}"
+  python3 - "${out}" \
+    "${ROOK_CSI_CEPH_IMAGE}" \
+    "${ROOK_CSI_REGISTRAR_IMAGE}" \
+    "${ROOK_CSI_RESIZER_IMAGE}" \
+    "${ROOK_CSI_PROVISIONER_IMAGE}" \
+    "${ROOK_CSI_SNAPSHOTTER_IMAGE}" \
+    "${ROOK_CSI_ATTACHER_IMAGE}" <<'PYEOF'
+import sys
+
+path, csi_ceph, registrar, resizer, provisioner, snapshotter, attacher = sys.argv[1:]
+with open(path, encoding="utf-8") as f:
+    content = f.read()
+
+anchor = '  ROOK_CSI_ALLOW_UNSUPPORTED_VERSION: "false"\n'
+block = (
+    anchor +
+    f'  ROOK_CSI_CEPH_IMAGE: "{csi_ceph}"\n'
+    f'  ROOK_CSI_REGISTRAR_IMAGE: "{registrar}"\n'
+    f'  ROOK_CSI_RESIZER_IMAGE: "{resizer}"\n'
+    f'  ROOK_CSI_PROVISIONER_IMAGE: "{provisioner}"\n'
+    f'  ROOK_CSI_SNAPSHOTTER_IMAGE: "{snapshotter}"\n'
+    f'  ROOK_CSI_ATTACHER_IMAGE: "{attacher}"\n'
+)
+
+if anchor not in content:
+    raise SystemExit("Không tìm thấy anchor ROOK_CSI_ALLOW_UNSUPPORTED_VERSION trong operator.yaml")
+
+content = content.replace(anchor, block, 1)
+with open(path, "w", encoding="utf-8") as f:
+    f.write(content)
+PYEOF
+  echo "${out}"
+}
+
+render_cluster_manifest() {
+  local out="${TMP_DIR}/cluster.yaml"
+  cp "${MANIFEST_DIR}/cluster.yaml" "${out}"
+  sed -i "s|image: .*|image: ${CEPH_IMAGE}|" "${out}"
+  echo "${out}"
+}
+
+render_toolbox_manifest() {
+  local out="${TMP_DIR}/toolbox.yaml"
+  curl -fsSL "${ROOK_BASE}/toolbox.yaml" -o "${out}"
+  sed -i "s|image: .*|image: ${CEPH_IMAGE}|" "${out}"
+  echo "${out}"
+}
+
+check_image_pull_failures() {
+  local failed
+  failed="$(kubectl -n rook-ceph get pods --no-headers 2>/dev/null | awk '$3 ~ /ErrImagePull|ImagePullBackOff|Init:ErrImagePull|Init:ImagePullBackOff/ {print $1; exit}')"
+  if [[ -n "${failed}" ]]; then
+    error "Pod ${failed} bị lỗi pull image."
+    kubectl -n rook-ceph describe pod "${failed}" || true
+    exit 1
+  fi
+}
 
 # ============================================================
 # Pre-flight
@@ -69,7 +155,8 @@ kubectl apply -f "${ROOK_BASE}/common.yaml"
 
 # Operator
 log "Apply operator..."
-kubectl apply -f "${ROOK_BASE}/operator.yaml"
+OPERATOR_MANIFEST="$(render_operator_manifest)"
+kubectl apply -f "${OPERATOR_MANIFEST}"
 
 # Đợi operator ready
 log "Đợi Rook operator ready (${WAIT_TIMEOUT}s)..."
@@ -83,10 +170,13 @@ log "Operator ready ✅"
 log "==> [2/4] Deploy CephCluster"
 
 # Dùng manifest local (đã tuỳ chỉnh cho loop device)
-kubectl apply -f "${MANIFEST_DIR}/cluster.yaml"
+CLUSTER_MANIFEST="$(render_cluster_manifest)"
+kubectl apply -f "${CLUSTER_MANIFEST}"
 
 log "Đợi CephCluster khởi tạo — đây có thể mất 5-10 phút..."
 log "(Theo dõi: kubectl -n rook-ceph get pods -w)"
+sleep 10
+check_image_pull_failures
 
 # Đợi MON pods trước
 log "Đợi MON pods..."
@@ -94,6 +184,7 @@ kubectl -n rook-ceph wait pod \
   -l app=rook-ceph-mon \
   --for=condition=Ready \
   --timeout=600s 2>/dev/null || warn "MON timeout, tiếp tục..."
+check_image_pull_failures
 
 # Đợi MGR
 log "Đợi MGR pod..."
@@ -101,6 +192,7 @@ kubectl -n rook-ceph wait pod \
   -l app=rook-ceph-mgr \
   --for=condition=Ready \
   --timeout=300s 2>/dev/null || warn "MGR timeout, tiếp tục..."
+check_image_pull_failures
 
 # Đợi OSD
 log "Đợi OSD pods (có thể lâu nhất)..."
@@ -110,6 +202,7 @@ until kubectl -n rook-ceph get pods -l app=rook-ceph-osd 2>/dev/null \
   sleep 10
   ELAPSED=$((ELAPSED+10))
   echo -n "."
+  check_image_pull_failures
   if [[ ${ELAPSED} -ge 600 ]]; then
     warn "OSD timeout sau 600s. Check: kubectl -n rook-ceph get pods"
     break
@@ -140,7 +233,8 @@ log "==> [4/4] Verify cluster"
 
 # Lấy cluster health qua toolbox
 log "Deploy Rook toolbox để check ceph status..."
-kubectl apply -f "${ROOK_BASE}/toolbox.yaml"
+TOOLBOX_MANIFEST="$(render_toolbox_manifest)"
+kubectl apply -f "${TOOLBOX_MANIFEST}"
 kubectl -n rook-ceph rollout status deployment/rook-ceph-tools \
   --timeout=120s 2>/dev/null || true
 

@@ -12,6 +12,7 @@
 #   WORKER_NODES   - IP các worker cách nhau dấu phẩy (bắt buộc nếu SKIP_PREPARE=0)
 #   ROOK_VERSION   - Phiên bản Rook (default: v1.14.9)
 #   SKIP_PREPARE   - Bỏ qua bước prepare node (default: 0)
+#   ROOK_IMAGE, CEPH_IMAGE, ROOK_CSI_* - Override image/registry khi cần
 #
 set -euo pipefail
 
@@ -43,6 +44,15 @@ fi
 log "==> Bước 1/2: Cài Rook Operator + CephCluster + StorageClass"
 WORKER_NODES="${WORKER_NODES}" \
 SKIP_PREPARE="${SKIP_PREPARE}" \
+ROOK_VERSION="${ROOK_VERSION:-v1.14.9}" \
+ROOK_IMAGE="${ROOK_IMAGE:-}" \
+CEPH_IMAGE="${CEPH_IMAGE:-}" \
+ROOK_CSI_CEPH_IMAGE="${ROOK_CSI_CEPH_IMAGE:-}" \
+ROOK_CSI_REGISTRAR_IMAGE="${ROOK_CSI_REGISTRAR_IMAGE:-}" \
+ROOK_CSI_RESIZER_IMAGE="${ROOK_CSI_RESIZER_IMAGE:-}" \
+ROOK_CSI_PROVISIONER_IMAGE="${ROOK_CSI_PROVISIONER_IMAGE:-}" \
+ROOK_CSI_SNAPSHOTTER_IMAGE="${ROOK_CSI_SNAPSHOTTER_IMAGE:-}" \
+ROOK_CSI_ATTACHER_IMAGE="${ROOK_CSI_ATTACHER_IMAGE:-}" \
   bash "${SCRIPT_DIR}/scripts/01-install-rook.sh"
 
 log "==> Bước 2/2: Test PVC"
