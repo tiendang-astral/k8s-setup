@@ -35,15 +35,23 @@ log "================================================="
 # ============================================================
 # BƯỚC 1: Cài packages cần thiết
 # ============================================================
-log "==> [1/4] Cài packages"
+log "==> [1/5] Cài packages"
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y -qq
-apt-get install -y lvm2 gdisk util-linux
+apt-get install -y lvm2 gdisk util-linux kmod
 
 # ============================================================
-# BƯỚC 2: Tạo file image
+# BƯỚC 2: Load RBD kernel module
 # ============================================================
-log "==> [2/4] Tạo OSD image file"
+log "==> [2/5] Load kernel module rbd"
+echo rbd > /etc/modules-load.d/rbd.conf
+modprobe rbd
+lsmod | grep -q '^rbd' || { error "Không load được kernel module rbd"; exit 1; }
+
+# ============================================================
+# BƯỚC 3: Tạo file image
+# ============================================================
+log "==> [3/5] Tạo OSD image file"
 if [[ ! -f "${OSD_IMG_PATH}" ]]; then
   log "Tạo ${OSD_IMG_PATH} (${OSD_IMG_SIZE}GB)..."
   dd if=/dev/zero of="${OSD_IMG_PATH}" bs=1G count="${OSD_IMG_SIZE}" status=progress
@@ -53,9 +61,9 @@ else
 fi
 
 # ============================================================
-# BƯỚC 3: Setup loop device
+# BƯỚC 4: Setup loop device
 # ============================================================
-log "==> [3/4] Setup loop device ${OSD_LOOP_DEV}"
+log "==> [4/5] Setup loop device ${OSD_LOOP_DEV}"
 
 # Detach nếu đang dùng
 losetup -d "${OSD_LOOP_DEV}" 2>/dev/null || true
@@ -70,9 +78,9 @@ dd if=/dev/zero of="${OSD_LOOP_DEV}" bs=1M count=10 2>/dev/null || true
 log "Loop device OK: $(losetup -l ${OSD_LOOP_DEV})"
 
 # ============================================================
-# BƯỚC 4: Persist qua reboot
+# BƯỚC 5: Persist qua reboot
 # ============================================================
-log "==> [4/4] Cấu hình persist sau reboot"
+log "==> [5/5] Cấu hình persist sau reboot"
 
 # Tạo systemd service để mount loop device khi boot
 cat > /etc/systemd/system/rook-osd-loop.service <<EOF
