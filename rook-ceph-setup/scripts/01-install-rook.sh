@@ -71,6 +71,7 @@ render_operator_manifest() {
   sed -i "s|image: rook/ceph:.*|image: ${ROOK_IMAGE}|" "${out}"
 
   python3 - "${out}" \
+    "${ROOK_IMAGE}" \
     "${ROOK_CSI_CEPH_IMAGE}" \
     "${ROOK_CSI_REGISTRAR_IMAGE}" \
     "${ROOK_CSI_RESIZER_IMAGE}" \
@@ -79,7 +80,7 @@ render_operator_manifest() {
     "${ROOK_CSI_ATTACHER_IMAGE}" <<'PYEOF'
 import sys
 
-path, csi_ceph, registrar, resizer, provisioner, snapshotter, attacher = sys.argv[1:]
+path, rook_image, csi_ceph, registrar, resizer, provisioner, snapshotter, attacher = sys.argv[1:]
 with open(path, encoding="utf-8") as f:
     content = f.read()
 
@@ -89,6 +90,7 @@ if anchor not in content:
 
 inject = (
     anchor +
+    f'  ROOK_CEPH_IMAGE: "{rook_image}"\n'
     f'  ROOK_CSI_CEPH_IMAGE: "{csi_ceph}"\n'
     f'  ROOK_CSI_REGISTRAR_IMAGE: "{registrar}"\n'
     f'  ROOK_CSI_RESIZER_IMAGE: "{resizer}"\n'
@@ -143,6 +145,11 @@ wait_for_deployment() {
   local timeout=${2:-$WAIT_TIMEOUT}
   log "Doi deployment/${name} ready (${timeout}s)..."
   kubectl -n "${ROOK_NAMESPACE}" rollout status "deployment/${name}" --timeout="${timeout}s"
+}
+
+cleanup_stale_jobs() {
+  log "Xóa các OSD prepare job cũ để operator tạo lại với image hiện tại..."
+  kubectl -n "${ROOK_NAMESPACE}" delete job -l app=rook-ceph-osd-prepare --ignore-not-found >/dev/null 2>&1 || true
 }
 
 wait_for_labeled_pod_ready() {
@@ -235,6 +242,7 @@ apply_operator_stack() {
   kubectl apply -f "${operator_manifest}"
 
   wait_for_deployment "rook-ceph-operator" "${WAIT_TIMEOUT}"
+  cleanup_stale_jobs
 }
 
 apply_cluster() {
