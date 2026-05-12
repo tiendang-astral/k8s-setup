@@ -16,6 +16,9 @@ log()   { echo -e "${GREEN}[INFO]${NC} $*"; }
 warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 
+CALICO_VERSION="${CALICO_VERSION:-v3.28.0}"
+CALICO_IMAGE_REGISTRY="${CALICO_IMAGE_REGISTRY:-quay.io}"
+
 if [[ $EUID -ne 0 ]]; then
   error "Phải chạy với quyền root: sudo $0 \"<lệnh kubeadm join...>\""
   exit 1
@@ -62,10 +65,10 @@ log "==> Pre-pull CNI images"
 if command -v crictl >/dev/null; then
   # Calico images
   for img in \
-    "docker.io/calico/cni:v3.28.0" \
-    "docker.io/calico/node:v3.28.0" \
-    "docker.io/calico/kube-controllers:v3.28.0" \
-    "docker.io/calico/pod2daemon-flexvol:v3.28.0"; do
+    "${CALICO_IMAGE_REGISTRY%/}/calico/cni:${CALICO_VERSION}" \
+    "${CALICO_IMAGE_REGISTRY%/}/calico/node:${CALICO_VERSION}" \
+    "${CALICO_IMAGE_REGISTRY%/}/calico/kube-controllers:${CALICO_VERSION}" \
+    "${CALICO_IMAGE_REGISTRY%/}/calico/pod2daemon-flexvol:${CALICO_VERSION}"; do
     pull_with_retry "${img}" || true
   done
 fi

@@ -68,6 +68,10 @@ sudo APISERVER_ADVERTISE=10.0.0.10 ./setup-master.sh
 # Dùng Flannel thay vì Calico
 sudo CNI=flannel ./setup-master.sh
 
+# Dùng registry thay thế cho image Calico
+sudo CALICO_IMAGE_REGISTRY=quay.io ./setup-master.sh
+sudo CALICO_IMAGE_REGISTRY=quay.io ./setup-worker.sh "<kubeadm join ...>"
+
 # HA control-plane endpoint (load balancer)
 sudo CONTROL_PLANE_ENDPOINT=k8s-api.example.com:6443 ./setup-master.sh
 ```

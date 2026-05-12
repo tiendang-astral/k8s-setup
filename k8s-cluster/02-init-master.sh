@@ -10,6 +10,7 @@
 #   CONTROL_PLANE_ENDPOINT- endpoint HA (vd: k8s-api.example.com:6443). Để trống nếu không HA.
 #   CNI                   - calico | flannel (default: calico)
 #   CALICO_VERSION        - version Calico (default: v3.28.0)
+#   CALICO_IMAGE_REGISTRY - registry thay thế cho image Calico (default: quay.io)
 #
 set -euo pipefail
 
@@ -32,6 +33,7 @@ APISERVER_ADVERTISE="${APISERVER_ADVERTISE:-$(ip -4 route get 1.1.1.1 2>/dev/nul
 CONTROL_PLANE_ENDPOINT="${CONTROL_PLANE_ENDPOINT:-}"
 CNI="${CNI:-calico}"
 CALICO_VERSION="${CALICO_VERSION:-v3.28.0}"
+CALICO_IMAGE_REGISTRY="${CALICO_IMAGE_REGISTRY:-quay.io}"
 
 # Tên user thường (không phải root) để copy kubeconfig về
 TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || echo root)}"
@@ -42,6 +44,7 @@ log "  SERVICE_CIDR          = ${SERVICE_CIDR}"
 log "  APISERVER_ADVERTISE   = ${APISERVER_ADVERTISE}"
 log "  CONTROL_PLANE_ENDPOINT= ${CONTROL_PLANE_ENDPOINT:-<không có>}"
 log "  CNI                   = ${CNI}"
+log "  CALICO_IMAGE_REGISTRY = ${CALICO_IMAGE_REGISTRY}"
 log "  TARGET_USER           = ${TARGET_USER}"
 echo
 
@@ -89,8 +92,11 @@ export KUBECONFIG=/etc/kubernetes/admin.conf
 log "==> [4/5] Cài CNI plugin: ${CNI}"
 case "${CNI}" in
   calico)
-    log "Cài Calico ${CALICO_VERSION}"
-    kubectl apply -f "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml"
+    log "Cài Calico ${CALICO_VERSION} từ ${CALICO_IMAGE_REGISTRY}"
+    CALICO_MANIFEST="/tmp/calico-${CALICO_VERSION}.yaml"
+    curl -fsSL "https://raw.githubusercontent.com/projectcalico/calico/${CALICO_VERSION}/manifests/calico.yaml" -o "${CALICO_MANIFEST}"
+    sed -i "s|docker.io/|${CALICO_IMAGE_REGISTRY%/}/|g" "${CALICO_MANIFEST}"
+    kubectl apply -f "${CALICO_MANIFEST}"
     ;;
   flannel)
     log "Cài Flannel"

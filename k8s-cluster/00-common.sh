@@ -61,35 +61,39 @@ mkdir -p /etc/containerd
 containerd config default | tee /etc/containerd/config.toml >/dev/null
 sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
 
-# Thêm registry mirror cho docker.io để tránh TLS timeout (đặc biệt từ VN)
+# Dùng config_path + certs.d để containerd áp registry hosts một cách ổn định.
+if ! grep -q 'config_path = "/etc/containerd/certs.d"' /etc/containerd/config.toml; then
+  sed -i '/\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\]/a\    config_path = "/etc/containerd/certs.d"' /etc/containerd/config.toml
+fi
+
+# Thêm registry mirror cho docker.io để tránh TLS timeout (đặc biệt từ VN).
+# Có thể đổi qua biến DOCKER_IO_MIRROR, mặc định là mirror.gcr.io
 # Có thể tắt bằng: SKIP_REGISTRY_MIRROR=1
 if [[ "${SKIP_REGISTRY_MIRROR:-0}" != "1" ]]; then
-  log "Thêm registry mirror cho docker.io (mirror.gcr.io)"
-  # Tìm dòng "[plugins."io.containerd.grpc.v1.cri".registry.mirrors]" và chèn mirror vào sau
-  python3 - <<'PYEOF'
-import re
-path = "/etc/containerd/config.toml"
-with open(path) as f:
-    content = f.read()
+  DOCKER_IO_MIRROR="${DOCKER_IO_MIRROR:-https://mirror.gcr.io}"
+  log "Cấu hình registry hosts cho docker.io qua ${DOCKER_IO_MIRROR}"
+  mkdir -p /etc/containerd/certs.d/docker.io
+  mkdir -p /etc/containerd/certs.d/registry-1.docker.io
 
-mirror_block = '''      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."docker.io"]
-        endpoint = ["https://mirror.gcr.io", "https://registry-1.docker.io"]
-'''
+  cat > /etc/containerd/certs.d/docker.io/hosts.toml <<EOF
+server = "https://docker.io"
 
-# Chỉ thêm nếu chưa có
-if 'registry.mirrors."docker.io"' not in content:
-    # Tìm section [registry.mirrors] và thêm vào sau
-    pattern = r'(\[plugins\."io\.containerd\.grpc\.v1\.cri"\.registry\.mirrors\]\s*\n)'
-    if re.search(pattern, content):
-        content = re.sub(pattern, r'\1' + mirror_block, content)
-        with open(path, 'w') as f:
-            f.write(content)
-        print("  ✅ Đã thêm mirror docker.io -> mirror.gcr.io")
-    else:
-        print("  ⚠️  Không tìm thấy section [registry.mirrors], bỏ qua")
-else:
-    print("  Mirror đã có, bỏ qua")
-PYEOF
+[host."${DOCKER_IO_MIRROR}"]
+  capabilities = ["pull", "resolve"]
+
+[host."https://registry-1.docker.io"]
+  capabilities = ["pull", "resolve"]
+EOF
+
+  cat > /etc/containerd/certs.d/registry-1.docker.io/hosts.toml <<EOF
+server = "https://registry-1.docker.io"
+
+[host."${DOCKER_IO_MIRROR}"]
+  capabilities = ["pull", "resolve"]
+
+[host."https://registry-1.docker.io"]
+  capabilities = ["pull", "resolve"]
+EOF
 fi
 
 systemctl restart containerd
