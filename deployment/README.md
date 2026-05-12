@@ -104,6 +104,10 @@ kubectl port-forward svc/redis-svc 6379:6379
 
 ## Apply Order
 
+Storage assumes Rook-Ceph is installed and exposes:
+- `rook-ceph-block` for `ReadWriteOnce` PVCs such as Postgres, Redis, MinIO, Prometheus, Grafana, and docprocess workspace.
+- `rook-cephfs` for `ReadWriteMany` PVCs shared by backend and workers.
+
 ```bash
 # 1. Database layer
 kubectl apply -f database/

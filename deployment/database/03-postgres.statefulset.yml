@@ -117,7 +117,7 @@ spec:
         name: postgres-data
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: rook-ceph-block
         resources:
           requests:
             storage: 4Gi
-        # storageClassName: standard  # Bỏ comment nếu cần chỉ định storage class

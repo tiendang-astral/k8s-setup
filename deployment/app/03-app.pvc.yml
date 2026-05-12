@@ -8,10 +8,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany   # Cần RWX vì backend + platform-worker cùng mount
+  storageClassName: rook-cephfs
   resources:
     requests:
       storage: 2Gi
-  # storageClassName: standard
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -23,10 +23,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  storageClassName: rook-cephfs
   resources:
     requests:
       storage: 2Gi
-  # storageClassName: standard
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -38,10 +38,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  storageClassName: rook-cephfs
   resources:
     requests:
       storage: 20Gi
-  # storageClassName: standard
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -53,10 +53,10 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  storageClassName: rook-cephfs
   resources:
     requests:
       storage: 2Gi
-  # storageClassName: standard
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -68,7 +68,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce   # Chỉ docprocess-worker dùng
+  storageClassName: rook-ceph-block
   resources:
     requests:
       storage: 2Gi
-  # storageClassName: standard

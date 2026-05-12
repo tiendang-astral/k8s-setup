@@ -47,6 +47,18 @@ fi
 
 success "Cluster is reachable."
 
+if ! kubectl get storageclass rook-ceph-block >/dev/null 2>&1; then
+  error "StorageClass rook-ceph-block not found. Install Rook-Ceph before deploying the app."
+  exit 1
+fi
+
+if ! kubectl get storageclass rook-cephfs >/dev/null 2>&1; then
+  error "StorageClass rook-cephfs not found. Install Rook-Ceph before deploying the app."
+  exit 1
+fi
+
+success "Rook-Ceph storage classes are available."
+
 # =============================================================================
 # STEP 2 – Apply Database layer
 # =============================================================================
